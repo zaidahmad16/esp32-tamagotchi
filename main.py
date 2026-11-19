@@ -15,7 +15,7 @@ EPOCH_OFFSET = 946684800 if time.gmtime(0)[0] == 2000 else 0  # board epoch -> u
 SAVE_EVERY = 300
 STATE = "state.json"
 
-cfg = {"name": "Ember", "hostname": "boardpet", "ssid": "", "password": ""}
+cfg = {"name": "Patrick", "hostname": "boardpet", "ssid": "", "password": ""}
 try:
     with open("config.json") as f:
         cfg.update(json.load(f))

@@ -14,7 +14,7 @@ import pet  # noqa: E402
 args = sys.argv[1:]
 port = int(args[0]) if args and args[0].isdigit() else 8765
 speed = float(args[args.index("--speed") + 1]) if "--speed" in args else 1.0
-s = pet.new_state("Ember")
+s = pet.new_state("Patrick")
 if "--hatched" in args:
     pet.apply_elapsed(s, 300)
 message = ""
@@ -57,7 +57,7 @@ class H(BaseHTTPRequestHandler):
             s["name"] = q["name"][:16]
         elif u.path == "/api/new_egg" and q.get("confirm") == "yes":
             s.clear()
-            s.update(pet.new_state("Ember"))
+            s.update(pet.new_state("Patrick"))
         elif u.path == "/api/debug":  # mock only: set stats for screenshots
             for k, v in q.items():
                 s[k] = json.loads(v)

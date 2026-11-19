@@ -22,7 +22,7 @@ STEP = 60                       # simulation chunk, seconds
 STAGES = (("egg", 300), ("hatchling", DAY), ("young", 3 * DAY), ("adult", None))
 
 
-def new_state(name="Ember"):
+def new_state(name="Patrick"):
     return {
         "v": 1, "name": name, "age_s": 0.0,
         "hunger": 80.0, "happy": 80.0, "energy": 100.0, "clean": 100.0,
@@ -33,7 +33,7 @@ def new_state(name="Ember"):
     }
 
 
-def upgrade(s, name="Ember"):
+def upgrade(s, name="Patrick"):
     """Fill in any keys missing from an older or partial save."""
     base = new_state(s.get("name", name))
     for k in base:
