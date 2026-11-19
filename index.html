@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BoardPet</title>
+<style>
+:root {
+  --bg: #ecebe6; --panel: #f7f6f2; --line: #d6d4cc; --text: #1f211d; --muted: #6b6d66;
+  --btn: #ffffff; --btn-press: #e4e2da; --bar-off: #dddbd2; --bar-on: #3c4a36; --warn: #9a3b2a;
+  --lcd: #b4c3a0; --lcd-on: #253021; --lcd-ghost: rgba(37, 48, 33, .07); --lcd-night: #6f7b62;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151614; --panel: #1d1f1b; --line: #30332d; --text: #e8e8e2; --muted: #9a9c93;
+    --btn: #262924; --btn-press: #30342d; --bar-off: #30332d; --bar-on: #b4c3a0; --warn: #e08a72;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151614; --panel: #1d1f1b; --line: #30332d; --text: #e8e8e2; --muted: #9a9c93;
+  --btn: #262924; --btn-press: #30342d; --bar-off: #30332d; --bar-on: #b4c3a0; --warn: #e08a72;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex; justify-content: center; padding: 24px 16px 40px;
+}
+.device {
+  width: 100%; max-width: 420px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 22px; padding: 20px;
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+h1 { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -.01em; }
+.sub { color: var(--muted); font-size: 13px; text-align: right; }
+.screen {
+  background: var(--lcd); border-radius: 10px; padding: 10px;
+  border: 1px solid rgba(0,0,0,.18);
+}
+canvas { display: block; width: 100%; image-rendering: pixelated; }
+.msg {
+  font: 600 13px/1.3 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--lcd-on); min-height: 1.3em; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stats { margin: 16px 0 14px; display: grid; gap: 7px; }
+.stat { display: grid; grid-template-columns: 64px 1fr 30px; align-items: center; gap: 10px; font-size: 13px; }
+.stat span:first-child { color: var(--muted); }
+.stat .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.bar { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.bar i { height: 10px; border-radius: 2px; background: var(--bar-off); }
+.bar i.on { background: var(--bar-on); }
+.bar.low i.on { background: var(--warn); }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+button {
+  font: inherit; font-weight: 600; color: var(--text); background: var(--btn);
+  border: 1px solid var(--line); border-radius: 12px; padding: 11px 6px; cursor: pointer;
+  transition: background-color .1s, transform .06s;
+}
+button:active { background: var(--btn-press); transform: scale(.97); }
+button:disabled { opacity: .45; cursor: default; transform: none; }
+button.need { border-color: var(--text); }
+.game { display: none; }
+.playing .actions { display: none; }
+.playing .game { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.game p { grid-column: 1 / -1; margin: 0 0 2px; text-align: center; color: var(--muted); font-size: 13px; }
+details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; font-size: 14px; }
+summary { cursor: pointer; color: var(--muted); }
+.row { display: flex; gap: 8px; margin-top: 10px; }
+input {
+  flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--btn);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px;
+}
+.danger { color: var(--warn); }
+.offline { color: var(--warn); font-size: 13px; margin-top: 10px; display: none; }
+.is-offline .offline { display: block; }
+</style>
+</head>
+<body>
+<main class="device" id="dev">
+  <header>
+    <h1 id="name">…</h1>
+    <div class="sub" id="sub"></div>
+  </header>
+  <div class="screen">
+    <canvas id="lcd" width="480" height="280" aria-label="Your dragon"></canvas>
+    <div class="msg" id="msg"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="actions">
+    <button data-a="feed">Feed</button>
+    <button data-a="snack">Snack</button>
+    <button data-a="play" id="playBtn">Play</button>
+    <button data-a="clean">Clean</button>
+    <button data-a="medicine">Medicine</button>
+    <button data-a="lights" id="lightsBtn">Lights off</button>
+  </div>
+  <div class="game">
+    <p id="gameInfo">Which way will it look?</p>
+    <button data-g="-1">◀ Left</button>
+    <button data-g="1">Right ▶</button>
+  </div>
+  <div class="offline">Can't reach the board. Is it plugged in and on Wi-Fi?</div>
+  <details>
+    <summary>Settings</summary>
+    <div class="row"><input id="newName" maxlength="16" placeholder="New name"><button id="renameBtn">Rename</button></div>
+    <div class="row"><button id="eggBtn" class="danger">Hatch a new egg</button></div>
+  </details>
+</main>
+<script>
+"use strict";
+// ---------- sprites ('#' = pixel, 'E' = eye anchor) ----------
+const SPR = {
+  egg: [
+    "....####....", "...#....#...", "..#......#..", ".#..##....#.", ".#..##....#.",
+    "#..........#", "#.....##...#", "#.....##...#", "#..##......#", "#..##......#",
+    ".#........#.", ".#........#.", "..#......#..", "...######..."],
+  // side view, facing left; mirrored when facing right
+  hatchling: [
+    "....#.#.........", "...#####........", "..##E###........", ".#######........",
+    "######.....#.#..", "..####....#####.", "...###########..", "...###########..",
+    "...##########..#", "....#########.##", "....#.###..###..", "...##.##..##...."],
+  young: [
+    "....#..#..............", "....#..#..............", "...######.............",
+    "..###E###.............", ".########.............", "#########......#.#....",
+    ".#.#.####....######...", "......####...#######..", ".......####.##########",
+    "........##############", "........############.#", "........#.###...###..#",
+    ".......##.###..###..#.", "......###.##..###..##."],
+  adult: [
+    ".....#...#................", ".....#...#.......#........", "....#######.....###.......",
+    "...###E####....#####......", "..##########..#######.....", ".###########.#########....",
+    "#############.##########..", ".#.#.#.#####.....########.", "..........####.....#######",
+    "...........####....#####..", "...........###############", "...........##############.",
+    "............############.#", "............#.####..###..#", "...........##.####.###..#.",
+    "..........###.###..###.##.", "..........###.###.###....."],
+};
+const ICON = {
+  heart: [".#.#.", "#####", "#####", ".###.", "..#.."],
+  sick: [".###.", "#.#.#", "#####", ".#.#."],
+  cloud: [".##..", "####.", "#####", ".....", "#.#.#"],
+  z: ["###", "..#", ".#.", "#..", "###"],
+  meat: [".##.", "####", "####", ".##.", "..#.", "..#."],
+  meat2: ["....", ".##.", "###.", ".#..", "..#.", "..#."],
+  meat3: ["....", "....", ".#..", ".#..", "..#.", "..#."],
+  candy: ["#.###.#", ".#####.", "#.###.#"],
+  poop: ["..#..", ".##..", ".###.", "#####"],
+  note: ["..##", "..#.", "..#.", "###.", "##.."],
+  star: ["..#..", ".###.", "#####", ".###.", "#.#.#"],
+  pill: [".##.", "####", "#..#", ".##."],
+  check: ["....#", "...#.", "#.#..", ".#..."],
+  cross: ["#...#", ".#.#.", "..#..", ".#.#.", "#...#"],
+};
+const EYES = {  // offsets from the eye anchor, carved out of the head
+  open: [[0, -1], [0, 0]], happy: [[-1, 0], [0, -1], [1, 0]], sad: [[-1, -1], [0, 0], [1, 0]],
+  sleep: [[-1, 0], [0, 0], [1, 0]], sick: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+};
+
+// ---------- LCD ----------
+const W = 48, H = 28;
+const cv = document.getElementById("lcd"), cx = cv.getContext("2d");
+let grid;
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function clear() { grid = Array.from({ length: H }, () => new Uint8Array(W)); }
+function px(x, y, v = 1) { if (x >= 0 && y >= 0 && x < W && y < H) grid[y][x] = v; }
+function blit(rows, ox, oy, eyes, flip = false) {
+  const w = rows[0].length, X = x => ox + (flip ? w - 1 - x : x);
+  rows.forEach((r, y) => [...r].forEach((c, x) => {
+    if (c === "#" || c === "E") px(X(x), oy + y);
+  }));
+  if (!eyes) return;
+  rows.forEach((r, y) => [...r].forEach((c, x) => {
+    if (c === "E") EYES[eyes].forEach(([dx, dy]) => px(X(x) + (flip ? -dx : dx), oy + y + dy, 0));
+  }));
+}
+function paint(night) {
+  const p = cv.width / W, g = Math.max(1, Math.round(p * .12));
+  cx.fillStyle = night ? css("--lcd-night") : css("--lcd");
+  cx.fillRect(0, 0, cv.width, cv.height);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    cx.fillStyle = grid[y][x] ? css("--lcd-on") : css("--lcd-ghost");
+    cx.fillRect(x * p, y * p, p - g, p - g);
+  }
+}
+
+// ---------- state + animation ----------
+let st = null, seq = -1, frame = 0, petX = 0, facing = -1, anim = null, game = null, busy = false;
+const $ = id => document.getElementById(id);
+
+function eyesFor(m) { return { happy: "happy", ok: "open", sad: "sad", sleep: "sleep", sick: "sick" }[m] || "open"; }
+
+function draw() {
+  clear();
+  if (!st) { paint(false); return; }
+  const stage = st.stage, spr = SPR[stage];
+  const sw = spr[0].length, sh = spr.length, maxX = Math.max(0, W - 19 - sw);
+  const baseX = Math.round(maxX / 2), baseY = H - sh - 2;
+  const still = st.asleep || st.sick || stage === "egg" || game;
+  const x = Math.max(0, Math.min(maxX, baseX + (still ? 0 : petX)));
+  const bob = st.asleep ? 0 : frame % 2;
+
+  if (stage === "egg") {
+    const ex = baseX + 3 + (frame % 2);
+    blit(spr, ex, baseY, null);
+    if (st.hatch_in < 120) [[2, 7], [3, 6], [4, 7], [5, 6], [6, 7], [7, 6], [8, 7], [9, 6]]
+      .forEach(([dx, dy]) => px(ex + dx, baseY + dy, 0));
+  } else if (game) {
+    blit(spr, baseX, baseY, "open", game.look > 0);
+    if (game.result) blit(ICON[game.result], W - 10, 4);
+  } else {
+    const a = anim && anim.t > 0 ? anim : null;
+    const flip = facing > 0;
+    const eyes = a && (a.k === "pat" || a.k === "play" || a.k === "snack") ? "happy" : eyesFor(st.mood);
+    blit(spr, x, baseY + bob, eyes, flip);
+    // head is at the front of the sprite: left edge when facing left, right edge when facing right
+    const headX = flip ? x + sw - 10 : x + 3, hy = Math.max(0, baseY - 6);
+    const mouthX = flip ? x + sw + 1 : x - 5;
+    if (a) {
+      if (a.k === "eat") blit(ICON[["meat", "meat2", "meat3"][Math.min(2, 3 - Math.ceil(a.t / 2))]], mouthX, baseY + 2);
+      else if (a.k === "snack") blit(ICON.candy, flip ? x + sw + 1 : Math.max(0, x - 8), baseY + 4);
+      else if (a.k === "pat" || a.k === "play") blit(ICON.heart, headX, hy - (a.t % 2));
+      else if (a.k === "clean") blit(ICON.star, (a.t * 7) % (W - 5), 1);
+      else if (a.k === "medicine") blit(ICON.pill, mouthX, baseY + 3);
+    } else if (st.asleep) {
+      blit(ICON.z, headX, hy); if (frame % 2) blit(ICON.z, headX + 4, Math.max(0, hy - 4));
+    } else if (st.sick) blit(ICON.sick, headX, hy);
+    else if (st.mood === "sad") blit(ICON.cloud, headX, hy - bob);
+    else if (st.mood === "happy" && frame % 6 < 2) blit(ICON.note, headX, hy);
+  }
+  for (let i = 0; i < Math.min(st.poops, 3); i++) blit(ICON.poop, W - 6 - i * 6, H - 6);
+  paint(st.asleep && stage !== "egg");
+}
+
+setInterval(() => {
+  frame++;
+  if (anim && anim.t > 0) anim.t--;
+  if (frame % 2 === 0 && st && !st.asleep && !st.sick && !game) {
+    const step = [-1, 0, 0, 1][Math.floor(Math.random() * 4)];
+    const next = Math.max(-4, Math.min(4, petX + step));
+    if (next !== petX) facing = next > petX ? 1 : -1;
+    petX = next;
+  }
+  draw();
+}, 600);
+
+// ---------- UI ----------
+const STATS = [["hunger", "Full"], ["happy", "Happy"], ["energy", "Energy"], ["clean", "Clean"]];
+$("stats").innerHTML = STATS.map(([k, l]) =>
+  `<div class="stat"><span>${l}</span><div class="bar" id="bar-${k}">${"<i></i>".repeat(10)}</div><span class="n" id="n-${k}"></span></div>`).join("");
+
+function age(s) {
+  if (s < 3600) return Math.floor(s / 60) + "m";
+  if (s < 86400) return Math.floor(s / 3600) + "h";
+  return Math.floor(s / 86400) + "d " + Math.floor((s % 86400) / 3600) + "h";
+}
+const STAGE_NAME = { egg: "Egg", hatchling: "Hatchling", young: "Young dragon", adult: "Adult dragon" };
+const NEED_BTN = { food: "feed", play: "play", clean: "clean", medicine: "medicine", sleep: "lights" };
+
+function render() {
+  $("name").textContent = st.name;
+  $("sub").textContent = STAGE_NAME[st.stage] + (st.stage === "egg"
+    ? " · hatches in " + Math.max(0, Math.ceil(st.hatch_in / 60)) + "m" : " · " + age(st.age_s));
+  document.title = st.name + " · BoardPet";
+  STATS.forEach(([k]) => {
+    const v = st[k], on = Math.round(v / 10), bar = $("bar-" + k);
+    [...bar.children].forEach((i, n) => i.classList.toggle("on", n < on));
+    bar.classList.toggle("low", v < 25);
+    $("n-" + k).textContent = v;
+  });
+  $("lightsBtn").textContent = st.asleep ? "Wake up" : "Lights off";
+  const needed = new Set((st.needs || []).map(n => NEED_BTN[n]));
+  document.querySelectorAll("[data-a]").forEach(b => {
+    b.classList.toggle("need", needed.has(b.dataset.a));
+    b.disabled = st.stage === "egg" || busy;
+  });
+  if (!game) $("msg").textContent = st.message || defaultMsg();
+  if (st.event_seq !== seq) {
+    if (seq !== -1 && st.event) anim = { k: st.event, t: 6 };
+    seq = st.event_seq;
+  }
+  draw();
+}
+function defaultMsg() {
+  if (st.stage === "egg") return "Something is moving inside…";
+  const n = st.needs || [];
+  if (st.sick) return st.name + " looks sick.";
+  if (st.asleep) return "Zzz…";
+  if (n.includes("food")) return st.name + " is hungry.";
+  if (n.includes("clean")) return "It's getting messy.";
+  if (n.includes("play")) return st.name + " is bored.";
+  if (n.includes("sleep")) return st.name + " is sleepy.";
+  return st.mood === "happy" ? st.name + " is happy." : st.name + " is doing fine.";
+}
+
+async function api(path) {
+  try {
+    const r = await fetch(path, { cache: "no-store" });
+    if (!r.ok) throw 0;
+    st = await r.json();
+    $("dev").classList.remove("is-offline");
+    render();
+  } catch (e) { $("dev").classList.add("is-offline"); }
+}
+
+document.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", async () => {
+  let a = b.dataset.a;
+  if (a === "play") { startGame(); return; }
+  if (a === "lights") a = st && st.asleep ? "wake" : "sleep";
+  busy = true; await api("/api/act?a=" + a); busy = false; render();
+}));
+
+// ---------- mini-game: which way will it look? ----------
+function startGame() {
+  if (st.energy < 10 || st.asleep) { api("/api/act?a=play&won=0"); return; }
+  game = { round: 1, won: 0, look: 0, result: null, lock: false };
+  $("dev").classList.add("playing");
+  gameText();
+  draw();
+}
+function gameText() {
+  $("gameInfo").textContent = "Round " + game.round + " of 5 · " + game.won + " right";
+  $("msg").textContent = "Which way will " + st.name + " look?";
+}
+document.querySelectorAll("[data-g]").forEach(b => b.addEventListener("click", () => {
+  if (!game || game.lock) return;
+  game.lock = true;
+  const guess = +b.dataset.g, look = Math.random() < .5 ? -1 : 1;
+  game.look = look;
+  game.result = guess === look ? "check" : "cross";
+  if (guess === look) game.won++;
+  $("msg").textContent = guess === look ? "You got it!" : "Nope, the other way.";
+  draw();
+  setTimeout(async () => {
+    game.look = 0; game.result = null; game.lock = false;
+    if (game.round === 5) {
+      const won = game.won;
+      game = null;
+      $("dev").classList.remove("playing");
+      await api("/api/act?a=play&won=" + won);
+      return;
+    }
+    game.round++;
+    gameText();
+    draw();
+  }, 900);
+}));
+
+// ---------- settings ----------
+$("renameBtn").addEventListener("click", () => {
+  const n = $("newName").value.trim();
+  if (n) { api("/api/rename?name=" + encodeURIComponent(n)); $("newName").value = ""; }
+});
+let eggArmed = 0;
+$("eggBtn").addEventListener("click", () => {
+  if (Date.now() - eggArmed < 4000) {
+    eggArmed = 0; $("eggBtn").textContent = "Hatch a new egg";
+    api("/api/new_egg?confirm=yes");
+  } else {
+    eggArmed = Date.now(); $("eggBtn").textContent = "Tap again to replace " + (st ? st.name : "your pet");
+    setTimeout(() => { if (eggArmed && Date.now() - eggArmed >= 4000) $("eggBtn").textContent = "Hatch a new egg"; }, 4100);
+  }
+});
+
+// ---------- start ----------
+function fitCanvas() {
+  const r = Math.max(1, Math.round(cv.clientWidth * (window.devicePixelRatio || 1) / W));
+  cv.width = W * r; cv.height = H * r; draw();
+}
+window.addEventListener("resize", fitCanvas);
+fitCanvas();
+api("/api/sync?t=" + Date.now());
+setInterval(() => { if (!busy) api("/api/state"); }, 2000);
+</script>
+</body>
+</html>
